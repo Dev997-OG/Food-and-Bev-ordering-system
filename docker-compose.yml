@@ -1,0 +1,50 @@
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: verus
+      POSTGRES_USER: verus
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-verus-local-only}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - verus-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U verus -d verus"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+  app:
+    build: .
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: postgres://verus:${POSTGRES_PASSWORD:-verus-local-only}@db:5432/verus
+      SESSION_SECRET: ${SESSION_SECRET:?Set SESSION_SECRET in .env}
+      BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:?Set BOOTSTRAP_ADMIN_EMAIL in .env}
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:?Set BOOTSTRAP_ADMIN_PASSWORD in .env}
+      BOOTSTRAP_ADMIN_NAME: ${BOOTSTRAP_ADMIN_NAME:-Verus Admin}
+      TRUST_PROXY: ${TRUST_PROXY:-0}
+      PGSSL: ""
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_API_URL: ${OPENAI_API_URL:-https://api.openai.com/v1/chat/completions}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - verus-public-uploads:/app/public_uploads
+      - verus-private-uploads:/app/private_uploads
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+volumes:
+  verus-postgres:
+  verus-public-uploads:
+  verus-private-uploads:
